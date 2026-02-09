@@ -1,4 +1,4 @@
-# sgproject
+# MAD Project (Mobile Development)
 
 A new Flutter project.
 
