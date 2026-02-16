@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../screens/student_dashboard.dart';
+import '../../services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,6 +17,18 @@ class _LoginScreenState extends State<LoginScreen> {
   bool isStudent = true;
   bool isPasswordVisible = false;
   bool rememberMe = false;
+  bool _isLoading = false;
+
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _authService = AuthService();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,9 +159,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Hostel ID Input
+              // Username Input (Email for now)
               Text(
-                'Hostel ID',
+                'E-mail',
                 style: GoogleFonts.plusJakartaSans(
                   fontWeight: FontWeight.w600,
                   color: Colors.black,
@@ -153,9 +169,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               TextField(
+                controller: _emailController,
                 decoration: InputDecoration(
-                  hintText: 'e.g., H-10293',
-                  prefixIcon: const Icon(Icons.badge_outlined, color: Colors.grey),
+                  prefixIcon: const Icon(LucideIcons.user, color: Colors.grey),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
@@ -184,9 +200,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               TextField(
+                controller: _passwordController,
                 obscureText: !isPasswordVisible,
                 decoration: InputDecoration(
-                  hintText: '••••••••',
                   prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.grey),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -267,15 +283,59 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (isStudent) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const StudentDashboard()),
-                      );
-                    }
-                  },
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                          setState(() => _isLoading = true);
+                          try {
+                            final response = await _authService.signInWithUsernameOrEmail(
+                              _emailController.text.trim(),
+                              _passwordController.text.trim(),
+                            );
+                            if (context.mounted) {
+                              if (response.user != null) {
+                                // Navigate based on role or selection (for now selection)
+                                if (isStudent) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) =>
+                                            const StudentDashboard()),
+                                  );
+                                } else {
+                                  // TODO: Warden Dashboard
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'Warden Dashboard not implemented yet')),
+                                  );
+                                }
+                              }
+                            }
+                          } on AuthException catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(e.message),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: ${e.toString()}'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isLoading = false);
+                            }
+                          }
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2D31FA),
                     foregroundColor: Colors.white,
@@ -284,13 +344,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
-                    'Login',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            'Login',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                 ),
               ),
 
@@ -308,13 +377,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   GestureDetector(
                     child: Text(
-                      'Contact Admin',
+                      'Sign Up',
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w700,
                         color: const Color(0xFF2D31FA),
                       ),
                     ),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const SignUpScreen()),
+                      );
+                    },
                   ),
                 ],
               ),

@@ -3,7 +3,16 @@ import 'package:google_fonts/google_fonts.dart';
 // import 'screens/warden_dashboard.dart';
 import 'auth/screens/login_screen.dart';
 
-void main() {
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: 'https://wphtumqntjdlbtjjrvig.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwaHR1bXFudGpkbGJ0ampydmlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMzkwNTksImV4cCI6MjA4NjYxNTA1OX0.FqP1nugwugjJ9MFMap86e3mQj-mBBk5V8EnoDE06r58',
+  );
+
   runApp(const HostelFixApp());
 }
 
