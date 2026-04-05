@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'remember_me_service.dart';
+
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
@@ -155,6 +157,7 @@ class AuthService {
   // Sign out
   Future<void> signOut() async {
     await _supabase.auth.signOut();
+    await RememberMeService().clear();
   }
 
   // Get profile data (if you have a profiles table)

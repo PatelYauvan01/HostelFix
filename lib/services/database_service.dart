@@ -62,46 +62,25 @@ class DatabaseService {
   // Fetch all students for warden student listing
   Future<List<Map<String, dynamic>>> getAllStudents() async {
     try {
-      final Map<String, Map<String, dynamic>> byId = {};
-
-      final studentProfileRows = await _supabase
-          .from('student_profiles')
-          .select('id, username, full_name, email, phone_number, room_number')
-          .order('full_name', ascending: true);
-
-      for (final row in List<Map<String, dynamic>>.from(studentProfileRows)) {
-        final id = row['id']?.toString();
-        if (id == null || id.isEmpty) continue;
-        byId[id] = row;
-      }
-
-      // Legacy fallback source for old records not yet copied to student_profiles.
       final data = await _supabase
           .from('profiles')
-          .select('id, username, full_name, email, phone_number, room_number, role')
+          .select('*')
           .or('role.eq.student,role.eq.Student,role.eq.STUDENT')
           .order('full_name', ascending: true);
 
-      for (final row in List<Map<String, dynamic>>.from(data)) {
-        final id = row['id']?.toString();
-        if (id == null || id.isEmpty) continue;
-        byId.putIfAbsent(id, () => row);
-      }
-
-      final merged = byId.values.toList();
-      merged.sort((a, b) {
-        final aName = (a['full_name'] ?? '').toString().toLowerCase();
-        final bName = (b['full_name'] ?? '').toString().toLowerCase();
+      final students = List<Map<String, dynamic>>.from(data);
+      students.sort((a, b) {
+        final aName = (a['full_name'] ?? a['username'] ?? '').toString().toLowerCase();
+        final bName = (b['full_name'] ?? b['username'] ?? '').toString().toLowerCase();
         return aName.compareTo(bName);
       });
-      return merged;
+      return students;
     } on PostgrestException catch (e) {
-      // Some schemas may not include student_profiles/email in old setups.
+      // Fallback for schemas without a role column.
       if (e.code == 'PGRST204') {
         final data = await _supabase
             .from('profiles')
-            .select('id, username, full_name, phone_number, room_number, role')
-          .or('role.eq.student,role.eq.Student,role.eq.STUDENT')
+            .select('*')
             .order('full_name', ascending: true);
         return List<Map<String, dynamic>>.from(data);
       }

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/remember_me_service.dart';
 import '../../screens/warden_dashboard.dart';
 import 'role_selection_screen.dart';
 
@@ -17,6 +18,7 @@ class _WardenLoginScreenState extends State<WardenLoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+  final _rememberMeService = RememberMeService();
 
   bool _rememberMe = false;
   bool _obscurePassword = true;
@@ -47,6 +49,11 @@ class _WardenLoginScreenState extends State<WardenLoginScreen> {
 
       if (!mounted) return;
       if (response.user != null) {
+        if (_rememberMe) {
+          await _rememberMeService.save(role: 'warden');
+        } else {
+          await _rememberMeService.clear();
+        }
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const WardenDashboard()),
         );

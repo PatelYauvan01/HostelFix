@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../auth/screens/role_selection_screen.dart';
+import '../services/auth_service.dart';
 import '../services/database_service.dart';
 
 class WardenDashboard extends StatefulWidget {
@@ -12,6 +14,7 @@ class WardenDashboard extends StatefulWidget {
 
 class _WardenDashboardState extends State<WardenDashboard> {
   static const Color _primary = Color(0xFF2D31FA);
+  final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
   static const List<String> _statusOptions = [
     'PENDING',
@@ -31,15 +34,34 @@ class _WardenDashboardState extends State<WardenDashboard> {
 
   List<Map<String, dynamic>> _complaints = [];
   List<Map<String, dynamic>> _students = [];
+  List<Map<String, dynamic>> _filteredStudents = [];
+  List<Map<String, dynamic>> _filteredReports = [];
   Map<String, String> _submitterNames = {};
   bool _isLoading = true;
   bool _isStudentsLoading = true;
+  final TextEditingController _studentSearchController = TextEditingController();
+  final TextEditingController _reportSearchController = TextEditingController();
+  int _selectedReportFilter = 0;
+
+  final List<String> _reportFilters = const [
+    'All Reports',
+    'Pending',
+    'In Progress',
+    'Resolved',
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadComplaints();
     _loadStudents();
+  }
+
+  @override
+  void dispose() {
+    _studentSearchController.dispose();
+    _reportSearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadComplaints() async {
@@ -60,6 +82,7 @@ class _WardenDashboardState extends State<WardenDashboard> {
 
     setState(() {
       _complaints = complaints;
+      _filteredReports = complaints;
       _submitterNames = names;
       _isLoading = false;
     });
@@ -71,7 +94,50 @@ class _WardenDashboardState extends State<WardenDashboard> {
     if (!mounted) return;
     setState(() {
       _students = students;
+      _filteredStudents = students;
       _isStudentsLoading = false;
+    });
+  }
+
+  void _filterStudents(String query) {
+    if (query.isEmpty) {
+      setState(() => _filteredStudents = _students);
+    } else {
+      final q = query.toLowerCase();
+      setState(() {
+        _filteredStudents = _students.where((student) {
+          final fullName = (student['full_name']?.toString() ?? '').toLowerCase();
+          final email = (student['email']?.toString() ?? '').toLowerCase();
+          final room = (student['room_number']?.toString() ?? '').toLowerCase();
+          return fullName.contains(q) || email.contains(q) || room.contains(q);
+        }).toList();
+      });
+    }
+  }
+
+  void _filterReports(String query) {
+    final lowerQuery = query.toLowerCase();
+    setState(() {
+      _filteredReports = _complaints.where((complaint) {
+        final status = _normalizeStatus(complaint['status']);
+        final title = (complaint['title']?.toString() ?? '').toLowerCase();
+        final description = (complaint['description']?.toString() ?? '').toLowerCase();
+        final category = _normalizeCategory(complaint['category']).toLowerCase();
+
+        final matchesFilter = switch (_selectedReportFilter) {
+          1 => status == 'PENDING',
+          2 => status == 'IN PROGRESS',
+          3 => status == 'RESOLVED',
+          _ => true,
+        };
+
+        final matchesQuery = lowerQuery.isEmpty ||
+            title.contains(lowerQuery) ||
+            description.contains(lowerQuery) ||
+            category.contains(lowerQuery);
+
+        return matchesFilter && matchesQuery;
+      }).toList();
     });
   }
 
@@ -82,52 +148,53 @@ class _WardenDashboardState extends State<WardenDashboard> {
     final activeCount = _complaints.where((item) => _normalizeStatus(item['status']) == 'IN PROGRESS').length;
     final resolvedCount = _complaints.where((item) => _normalizeStatus(item['status']) == 'RESOLVED').length;
 
+    Widget body;
+    if (_selectedTab == 2) {
+      body = _buildStudentsTab();
+    } else if (_selectedTab == 1) {
+      body = _buildReportsTab();
+    } else {
+      body = _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadComplaints,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                  _buildStatsRow(
+                    newCount: pendingCount,
+                    activeCount: activeCount,
+                    resolvedCount: resolvedCount,
+                  ),
+                  const SizedBox(height: 28),
+                  _buildSectionHeader(),
+                  const SizedBox(height: 14),
+                  _buildFilterChips(),
+                  const SizedBox(height: 18),
+                  if (visibleComplaints.isEmpty)
+                    _buildEmptyState()
+                  else
+                    for (final complaint in visibleComplaints) ...[
+                      _ComplaintCard(
+                        complaint: complaint,
+                        submitterName: _submitterNames[complaint['user_id']?.toString() ?? ''] ?? 'Student',
+                        onUpdateStatus: () => _openStatusDialog(complaint),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  const SizedBox(height: 12),
+                ],
+              ),
+            );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: _selectedTab == 0 ? _buildCenterAction() : null,
       bottomNavigationBar: _buildBottomBar(),
-      body: SafeArea(
-        child: _selectedTab == 2
-            ? _buildStudentsTab()
-            : (_selectedTab == 0
-                ? (_isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : RefreshIndicator(
-                onRefresh: _loadComplaints,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    _buildStatsRow(
-                      newCount: pendingCount,
-                      activeCount: activeCount,
-                      resolvedCount: resolvedCount,
-                    ),
-                    const SizedBox(height: 28),
-                    _buildSectionHeader(),
-                    const SizedBox(height: 14),
-                    _buildFilterChips(),
-                    const SizedBox(height: 18),
-                    if (visibleComplaints.isEmpty)
-                      _buildEmptyState()
-                    else
-                      for (final complaint in visibleComplaints) ...[
-                        _ComplaintCard(
-                          complaint: complaint,
-                          submitterName: _submitterNames[complaint['user_id']?.toString() ?? ''] ?? 'Student',
-                          onUpdateStatus: () => _openStatusDialog(complaint),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    const SizedBox(height: 12),
-                  ],
-                ),
-              ))
-                : _buildComingSoonTab()),
-      ),
+      body: SafeArea(child: body),
     );
   }
 
@@ -142,47 +209,91 @@ class _WardenDashboardState extends State<WardenDashboard> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
         children: [
-          _buildHeader(),
-          const SizedBox(height: 20),
           Text(
-            'Students',
+            'Student Management',
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 22,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
               color: const Color(0xFF11131E),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 16),
           Text(
-            'Total students: ${_students.length}',
+            'Student Directory',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF11131E),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Manage and monitor student residency across all blocks.',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 14,
               color: const Color(0xFF5B6080),
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _studentSearchController,
+            onChanged: _filterStudents,
+            decoration: InputDecoration(
+              hintText: 'Search by name, email, or room...',
+              hintStyle: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                color: const Color(0xFF9CA3AF),
+              ),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF9CA3AF)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
           const SizedBox(height: 16),
-          if (_students.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.tune, color: Color(0xFF2D31FA), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Filters',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF2D31FA),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_filteredStudents.isEmpty)
             _buildStudentsEmptyState()
           else
-            ..._students.map((student) {
+            ..._filteredStudents.map((student) {
               final fullName = (student['full_name']?.toString().trim().isNotEmpty == true)
                   ? student['full_name'].toString()
-                  : 'Student';
-              final username = student['username']?.toString() ?? '—';
-              final phone = student['phone_number']?.toString() ?? '—';
-              final email = student['email']?.toString() ?? '—';
-              final room = student['room_number']?.toString() ?? '—';
+                  : (student['username']?.toString().trim().isNotEmpty == true
+                      ? student['username'].toString()
+                      : 'Student');
 
               return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.only(bottom: 16),
                 child: _StudentCard(
                   fullName: fullName,
                   initials: _initialsFromName(fullName),
-                  username: username,
-                  phone: phone,
-                  email: email,
-                  room: room,
+                  profileData: student,
                 ),
               );
             }),
@@ -218,15 +329,104 @@ class _WardenDashboardState extends State<WardenDashboard> {
     );
   }
 
-  Widget _buildComingSoonTab() {
-    return Center(
-      child: Text(
-        'Coming soon',
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 16,
-          color: const Color(0xFF5B6080),
-          fontWeight: FontWeight.w600,
-        ),
+  Widget _buildReportsTab() {
+    final visibleReports = _filteredReports.isEmpty ? _complaints : _filteredReports;
+
+    return RefreshIndicator(
+      onRefresh: _loadComplaints,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.menu_rounded, color: Color(0xFF2D31FA)),
+              const SizedBox(width: 10),
+              Text(
+                'Maintenance Reports',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF2D31FA),
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.notifications_none_rounded, color: Color(0xFF64748B)),
+            ],
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _reportSearchController,
+            onChanged: _filterReports,
+            decoration: InputDecoration(
+              hintText: 'Search maintenance logs...',
+              hintStyle: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                color: const Color(0xFF9CA3AF),
+              ),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF9CA3AF)),
+              filled: true,
+              fillColor: const Color(0xFFF3F4F6),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(color: Color(0xFF2D31FA), width: 1.2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(_reportFilters.length, (index) {
+                final selected = _selectedReportFilter == index;
+                return Padding(
+                  padding: EdgeInsets.only(right: index == _reportFilters.length - 1 ? 0 : 10),
+                  child: ChoiceChip(
+                    label: Text(_reportFilters[index]),
+                    selected: selected,
+                    onSelected: (_) {
+                      setState(() => _selectedReportFilter = index);
+                      _filterReports(_reportSearchController.text);
+                    },
+                    labelStyle: GoogleFonts.plusJakartaSans(
+                      color: selected ? Colors.white : const Color(0xFF475569),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    selectedColor: const Color(0xFF2D31FA),
+                    backgroundColor: const Color(0xFFE7EBF0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      side: BorderSide.none,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (visibleReports.isEmpty)
+            _buildEmptyState()
+          else
+            ...visibleReports.map((complaint) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: _ComplaintCard(
+                  complaint: complaint,
+                  submitterName: _submitterNames[complaint['user_id']?.toString() ?? ''] ?? 'Student',
+                  onUpdateStatus: () => _openStatusDialog(complaint),
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -258,7 +458,7 @@ class _WardenDashboardState extends State<WardenDashboard> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Boys Hostel • Block A',
+                'Boys Hostel',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 15,
                   color: const Color(0xFF565A7A),
@@ -289,8 +489,42 @@ class _WardenDashboardState extends State<WardenDashboard> {
             ),
           ],
         ),
+        const SizedBox(width: 8),
+        InkWell(
+          onTap: _handleLogout,
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFD1D4E0)),
+              color: Colors.white,
+            ),
+            child: const Icon(Icons.logout_rounded, color: Color(0xFFE53935), size: 22),
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _handleLogout() async {
+    try {
+      await _authService.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Logout failed: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildStatsRow({
@@ -519,30 +753,6 @@ class _WardenDashboardState extends State<WardenDashboard> {
     }).toList();
   }
 
-  Widget _buildCenterAction() {
-    return Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: _primary.withValues(alpha: 0.28),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: _primary,
-        elevation: 0,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 34),
-      ),
-    );
-  }
-
   Widget _buildBottomBar() {
     return BottomAppBar(
       color: Colors.white,
@@ -557,7 +767,7 @@ class _WardenDashboardState extends State<WardenDashboard> {
           Expanded(child: _navItem(icon: Icons.assignment_outlined, label: 'Reports', index: 1)),
           const SizedBox(width: 46),
           Expanded(child: _navItem(icon: Icons.groups_outlined, label: 'Students', index: 2)),
-          Expanded(child: _navItem(icon: Icons.settings_outlined, label: 'Settings', index: 3)),
+          // Expanded(child: _navItem(icon: Icons.settings_outlined, label: 'Settings', index: 3)),
         ],
       ),
     );
@@ -889,77 +1099,129 @@ class _ComplaintCard extends StatelessWidget {
 class _StudentCard extends StatelessWidget {
   final String fullName;
   final String initials;
-  final String username;
-  final String phone;
-  final String email;
-  final String room;
+  final Map<String, dynamic> profileData;
 
   const _StudentCard({
     required this.fullName,
     required this.initials,
-    required this.username,
-    required this.phone,
-    required this.email,
-    required this.room,
+    required this.profileData,
   });
+
+  String _fieldValue(dynamic value) {
+    if (value == null) return '—';
+    final text = value.toString().trim();
+    return text.isEmpty ? '—' : text;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final email = _fieldValue(profileData['email']);
+    final room = _fieldValue(profileData['room_number']);
+    final phone = _fieldValue(profileData['phone_number']);
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD3D6E4)),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: const Color(0xFFD8D7FF),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: const Color(0xFFDDD6FE),
+                child: Text(
+                  initials,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: const Color(0xFF2D31FA),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fullName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      email,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        color: const Color(0xFF6B7280),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(6),
+            ),
             child: Text(
-              initials,
+              room,
               style: GoogleFonts.plusJakartaSans(
-                color: const Color(0xFF2D31FA),
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF374151),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fullName,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF11131E),
-                  ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.phone_outlined, color: Color.fromARGB(255, 36, 39, 43), size: 16),
+              const SizedBox(width: 6),
+              Text(
+                phone,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  color: const Color.fromARGB(255, 34, 36, 39),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '@$username • Room $room',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    color: const Color(0xFF5B6080),
-                    fontWeight: FontWeight.w500,
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '$phone • $email',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: const Color(0xFF7A7F94),
-                  ),
+                child: const Icon(Icons.email_outlined, color: Color(0xFF2D31FA), size: 18),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
-            ),
+                child: const Icon(Icons.more_vert, color: Color(0xFF6B7280), size: 18),
+              ),
+            ],
           ),
         ],
       ),

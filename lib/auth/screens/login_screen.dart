@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../screens/student_dashboard.dart';
 import '../../services/auth_service.dart';
+import '../../services/remember_me_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'signup_screen.dart';
 import 'role_selection_screen.dart';
@@ -22,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+  final _rememberMeService = RememberMeService();
 
   @override
   void dispose() {
@@ -244,6 +246,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             );
                             if (context.mounted) {
                               if (response.user != null) {
+                                if (rememberMe) {
+                                  await _rememberMeService.save(role: 'student');
+                                } else {
+                                  await _rememberMeService.clear();
+                                }
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(

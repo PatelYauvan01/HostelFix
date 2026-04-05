@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-// import 'screens/warden_dashboard.dart';
 import 'auth/screens/role_selection_screen.dart';
+import 'screens/student_dashboard.dart';
+import 'screens/warden_dashboard.dart';
+import 'services/remember_me_service.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -32,7 +34,54 @@ class HostelFixApp extends StatelessWidget {
           primary: const Color(0xFF2D31FA),
         ),
       ),
-      home: const RoleSelectionScreen(),
+      home: const StartupGate(),
+    );
+  }
+}
+
+class StartupGate extends StatelessWidget {
+  const StartupGate({super.key});
+
+  Future<Widget> _resolveHome() async {
+    final rememberMeService = RememberMeService();
+    final isRemembered = await rememberMeService.isRemembered();
+    final currentUser = Supabase.instance.client.auth.currentUser;
+
+    if (currentUser == null) {
+      return const RoleSelectionScreen();
+    }
+
+    if (!isRemembered) {
+      await Supabase.instance.client.auth.signOut();
+      await rememberMeService.clear();
+      return const RoleSelectionScreen();
+    }
+
+    final role = await rememberMeService.rememberedRole();
+    if (role == 'warden') {
+      return const WardenDashboard();
+    }
+
+    if (role == 'student') {
+      return const StudentDashboard();
+    }
+
+    return const RoleSelectionScreen();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _resolveHome(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return snapshot.data ?? const RoleSelectionScreen();
+      },
     );
   }
 }
