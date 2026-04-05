@@ -5,6 +5,7 @@ import '../../screens/student_dashboard.dart';
 import '../../services/auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'signup_screen.dart';
+import 'role_selection_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +15,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool isStudent = true;
   bool isPasswordVisible = false;
   bool rememberMe = false;
   bool _isLoading = false;
@@ -69,6 +69,24 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 48),
 
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  label: const Text('Back to role selection'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF2D31FA),
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
               // Welcome Text
               Text(
                 'Welcome Back',
@@ -88,76 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Role Toggle
-              Container(
-                height: 56,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => isStudent = true),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isStudent ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: isStudent
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.grey.withOpacity(0.1),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Student',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: isStudent ? FontWeight.w700 : FontWeight.w500,
-                              color: isStudent ? const Color(0xFF2D31FA) : Colors.grey[600],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => isStudent = false),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: !isStudent ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: !isStudent
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.grey.withOpacity(0.1),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Warden',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: !isStudent ? FontWeight.w700 : FontWeight.w500,
-                              color: !isStudent ? const Color(0xFF2D31FA) : Colors.grey[600],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
 
               // Username Input (Email for now)
               Text(
@@ -291,25 +240,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             final response = await _authService.signInWithUsernameOrEmail(
                               _emailController.text.trim(),
                               _passwordController.text.trim(),
+                              role: 'student',
                             );
                             if (context.mounted) {
                               if (response.user != null) {
-                                // Navigate based on role or selection (for now selection)
-                                if (isStudent) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) =>
-                                            const StudentDashboard()),
-                                  );
-                                } else {
-                                  // TODO: Warden Dashboard
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Warden Dashboard not implemented yet')),
-                                  );
-                                }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                          const StudentDashboard()),
+                                );
                               }
                             }
                           } on AuthException catch (e) {

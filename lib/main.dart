@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 // import 'screens/warden_dashboard.dart';
-import 'auth/screens/login_screen.dart';
+import 'auth/screens/role_selection_screen.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -32,7 +32,7 @@ class HostelFixApp extends StatelessWidget {
           primary: const Color(0xFF2D31FA),
         ),
       ),
-      home: const LoginScreen(),
+      home: const RoleSelectionScreen(),
     );
   }
 }
